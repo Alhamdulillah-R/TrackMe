@@ -132,6 +132,20 @@ func joinInts(ints []int, seperator string) string {
 	return strings.Join(tmp, seperator)
 }
 
+// same as joinInts but flags GREASE values, like we already do for ciphers/extensions/groups
+func joinSignatureAlgorithms(algs []int) string {
+	tmp := []string{}
+	for _, alg := range algs {
+		hex := "0x" + strings.ToUpper(strconv.FormatUint(uint64(alg), 16))
+		if types.IsGrease(hex) {
+			tmp = append(tmp, "GREASE")
+		} else {
+			tmp = append(tmp, fmt.Sprintf("%v", alg))
+		}
+	}
+	return strings.Join(tmp, "-")
+}
+
 func CalculatePeetPrint(parsed ClientHello, j JA3Calculating) (string, string) {
 	tmp := []string{}
 	for _, v := range parsed.SupportedProtocols {
@@ -156,14 +170,14 @@ func CalculatePeetPrint(parsed ClientHello, j JA3Calculating) (string, string) {
 	// Sort extensions because the order is randomized
 	sort.Strings(j.PeetPrintExtensions)
 
-	tls_versions := strings.Join(versions, "-")                  // Comma seperated list of supported TLS versions as sent in the `supported_versions` extension. TODO
-	protos := strings.Join(tmp, "-")                             // Comma seperated list of supported HTTP versions as sent in the `application_layer_protocol_negotiation` extension. http/1.0 => 1.0, http/1.1 => 1.1, http/2 => 2
-	sig_als := joinInts(parsed.SignatureAlgorithms, "-")         // Comma seperated list of supported signatue algorithms as sent in the `signature_algorithms` extension.
-	key_mode := fmt.Sprintf("%v", parsed.PSKKeyExchangeMode)     // The PSK key exchange mode as specified in the`psk_key_exchange_modes` extension. Usually 0 or 1.
-	comp_algs := joinInts(parsed.CertCompressionAlgorithms, "-") // Comma seperated list of the certificate compression algorithms as sent in the `compress_certificate` extension
-	groups := strings.Join(j.PeetPrintCurves, "-")               // Comma seperated list of supported elliptic curve groups as sent in the `supported_groups` extension.
-	suites := strings.Join(j.PeetPrintCiphers, "-")              // Cipher suites
-	extensions := strings.Join(j.PeetPrintExtensions, "-")       // Extensions
+	tls_versions := strings.Join(versions, "-")                    // Comma seperated list of supported TLS versions as sent in the `supported_versions` extension. TODO
+	protos := strings.Join(tmp, "-")                               // Comma seperated list of supported HTTP versions as sent in the `application_layer_protocol_negotiation` extension. http/1.0 => 1.0, http/1.1 => 1.1, http/2 => 2
+	sig_als := joinSignatureAlgorithms(parsed.SignatureAlgorithms) // Comma seperated list of supported signatue algorithms as sent in the `signature_algorithms` extension.
+	key_mode := fmt.Sprintf("%v", parsed.PSKKeyExchangeMode)       // The PSK key exchange mode as specified in the`psk_key_exchange_modes` extension. Usually 0 or 1.
+	comp_algs := joinInts(parsed.CertCompressionAlgorithms, "-")   // Comma seperated list of the certificate compression algorithms as sent in the `compress_certificate` extension
+	groups := strings.Join(j.PeetPrintCurves, "-")                 // Comma seperated list of supported elliptic curve groups as sent in the `supported_groups` extension.
+	suites := strings.Join(j.PeetPrintCiphers, "-")                // Cipher suites
+	extensions := strings.Join(j.PeetPrintExtensions, "-")         // Extensions
 
 	//	if debug {
 	//		fmt.Println("tls_versions:", tls_versions)
