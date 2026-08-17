@@ -182,6 +182,7 @@ type Config struct {
 	KeyFile      string `json:"key_file"`
 	Host         string `json:"host"`
 	HTTPRedirect string `json:"http_redirect"`
+	FrontendURL  string `json:"frontend_url"`
 	Device       string `json:"device"`
 	CorsKey      string `json:"cors_key"`
 	EnableQUIC   bool   `json:"enable_quic"`
@@ -206,6 +207,7 @@ func (c *Config) LoadFromFile() error {
 	c.CertFile = tmp.CertFile
 	c.KeyFile = tmp.KeyFile
 	c.HTTPRedirect = tmp.HTTPRedirect
+	c.FrontendURL = tmp.FrontendURL
 	c.Device = tmp.Device
 	c.CorsKey = tmp.CorsKey
 	c.EnableQUIC = tmp.EnableQUIC

@@ -6,6 +6,7 @@
   "key_file": "certs/key.pem",
   "host": "0.0.0.0",
   "http_redirect": "https://tls.peet.ws",
+  "frontend_url": "",
   "device": "eth0",
   "cors_key": "X-CORS",
   "enable_quic": true

@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pagpeter/trackme/pkg/types"
 	"github.com/pagpeter/trackme/pkg/utils"
@@ -16,7 +19,10 @@ type RouteHandler func(types.Response, url.Values) ([]byte, string, error)
 
 var (
 	ErrTLSNotAvailable = errors.New("TLS details not available")
+	frontendClient     = &http.Client{Timeout: 10 * time.Second}
 )
+
+const maximumFrontendResponseBytes = 8 * 1024 * 1024
 
 func staticFile(file string) RouteHandler {
 	return func(types.Response, url.Values) ([]byte, string, error) {
@@ -72,6 +78,43 @@ func apiRaw(res types.Response, _ url.Values) ([]byte, string, error) {
 		return nil, "", ErrTLSNotAvailable
 	}
 	return []byte(fmt.Sprintf(`{"raw": "%s", "raw_b64": "%s"}`, res.TLS.RawBytes, res.TLS.RawB64)), "application/json", nil
+}
+
+func proxyFrontend(frontendURL string, method string, requestURL *url.URL) ([]byte, string, error) {
+	if method != http.MethodGet && method != http.MethodHead {
+		return nil, "", fmt.Errorf("frontend method %s is not supported", method)
+	}
+
+	target := strings.TrimRight(frontendURL, "/") + requestURL.EscapedPath()
+	if requestURL.RawQuery != "" {
+		target += "?" + requestURL.RawQuery
+	}
+	req, err := http.NewRequest(method, target, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create frontend request: %w", err)
+	}
+	resp, err := frontendClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("frontend request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maximumFrontendResponseBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read frontend response: %w", err)
+	}
+	if len(body) > maximumFrontendResponseBytes {
+		return nil, "", fmt.Errorf("frontend response exceeds %d bytes", maximumFrontendResponseBytes)
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, "", fmt.Errorf("frontend returned %s", resp.Status)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(body)
+	}
+	return body, contentType, nil
 }
 
 func index(r types.Response, v url.Values) ([]byte, string, error) {

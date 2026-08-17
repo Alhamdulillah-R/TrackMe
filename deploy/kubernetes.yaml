@@ -13,6 +13,7 @@ data:
       "key_file": "/etc/mignon-tokyo/tls/private.pem",
       "host": "46.250.253.244",
       "http_redirect": "https://mignon-rex.tokyo",
+      "frontend_url": "http://mignon-tokyo-frontend:80",
       "device": "",
       "cors_key": "",
       "enable_quic": true

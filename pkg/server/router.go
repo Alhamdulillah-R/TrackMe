@@ -54,6 +54,12 @@ func Router(path string, res types.Response, srv *Server) ([]byte, string, error
 
 	paths := getAllPaths()
 	if u != nil {
+		if val, ok := paths[u.Path]; ok && u.Path == "/api/all" {
+			return val(res, m)
+		}
+		if frontendURL := srv.GetConfig().FrontendURL; frontendURL != "" {
+			return proxyFrontend(frontendURL, res.Method, u)
+		}
 		if val, ok := paths[u.Path]; ok {
 			return val(res, m)
 		}
