@@ -11,6 +11,20 @@ data:
         server_name mignon-rex.tokyo;
         return 301 https://mignon-rex.tokyo$request_uri;
     }
+
+    server {
+        listen 100.119.87.38:18080;
+        server_name _;
+
+        location / {
+            proxy_pass http://mignon-tokyo-frontend.mignon-tokyo.svc.cluster.local;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header X-Forwarded-Proto http;
+        }
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,6 +60,10 @@ spec:
             - name: http
               containerPort: 80
               hostPort: 80
+            - name: tailnet-ui
+              containerPort: 18080
+              hostPort: 18080
+              hostIP: 100.119.87.38
           readinessProbe:
             httpGet:
               host: 46.250.253.244
