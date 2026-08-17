@@ -63,17 +63,20 @@ spec:
               protocol: TCP
           startupProbe:
             tcpSocket:
+              host: 46.250.253.244
               port: https
             failureThreshold: 30
             periodSeconds: 2
             timeoutSeconds: 1
           readinessProbe:
             tcpSocket:
+              host: 46.250.253.244
               port: https
             periodSeconds: 5
             timeoutSeconds: 1
           livenessProbe:
             tcpSocket:
+              host: 46.250.253.244
               port: https
             periodSeconds: 15
             timeoutSeconds: 1
