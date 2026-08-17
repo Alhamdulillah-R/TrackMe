@@ -1,0 +1,12 @@
+{
+  "log_to_db": false,
+  "tls_port": "443",
+  "http_port": "18082",
+  "cert_file": "/etc/mignon-tokyo/tls/fullchain.crt",
+  "key_file": "/etc/mignon-tokyo/tls/private.pem",
+  "host": "46.250.253.244",
+  "http_redirect": "https://mignon-rex.tokyo",
+  "device": "",
+  "cors_key": "",
+  "enable_quic": true
+}
