@@ -120,6 +120,12 @@ func parseHTTP2(f *http2.Framer, c chan types.ParsedFrame) {
 				p.Settings = append(p.Settings, setting)
 				return nil
 			})
+			if !frame.IsAck() {
+				if err := f.WriteSettingsAck(); err != nil {
+					c <- types.ParsedFrame{Type: "ERROR_CLOSE"}
+					return
+				}
+			}
 		case *http2.HeadersFrame:
 			d := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
 			d.SetEmitEnabled(true)
@@ -129,8 +135,8 @@ func parseHTTP2(f *http2.Framer, c chan types.ParsedFrame) {
 			}
 
 			for _, h := range h2Headers {
-  				headerStr := fmt.Sprintf("%s: %s", h.Name, h.Value)
-   	 			p.Headers = append(p.Headers, headerStr)
+				headerStr := fmt.Sprintf("%s: %s", h.Name, h.Value)
+				p.Headers = append(p.Headers, headerStr)
 			}
 			if frame.HasPriority() {
 				prio := types.Priority{}
