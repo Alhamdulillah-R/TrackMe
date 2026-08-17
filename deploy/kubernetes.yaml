@@ -88,9 +88,9 @@ spec:
               cpu: 500m
               memory: 256Mi
           securityContext:
-            runAsUser: 65532
+            runAsUser: 0
             runAsGroup: 101
-            runAsNonRoot: true
+            runAsNonRoot: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
