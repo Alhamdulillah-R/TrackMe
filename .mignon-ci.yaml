@@ -1,0 +1,11 @@
+image: mignon/trackme
+
+build:
+  context: .
+  dockerfile: Dockerfile
+
+deploy:
+  namespace: mignon-tokyo
+  resource: deployment/trackme
+  container: trackme
+  timeout: 300s

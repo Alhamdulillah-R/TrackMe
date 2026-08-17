@@ -122,6 +122,12 @@ docker-compose -up --build
 # visit https://localhost/api/all
 ```
 
+## Mignon Tokyo deployment
+
+Tokyo 使用 repository-scoped Self-hosted Runners 构建并发布 immutable image。`master` push 触发 `.github/workflows/deploy.yml`，目标为 `mignon-tokyo/trackme`。
+
+生产 Pod 直接在公网地址上终止 TLS/HTTP/2/HTTP/3，证书只读挂载自 `/etc/mignon-tokyo/tls`。公网 `443/tcp` 与 `443/udp` 不经过 HTTP reverse proxy，因此 `/api/all` 看到的是 client 原始 TLS ClientHello、ALPN、HTTP/2 frames 与 QUIC settings。
+
 ## TLS & HTTP2 fingerprinting resources
 
 - [TLS 1.3, every byte explained](https://tls13.xargs.org/)

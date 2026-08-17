@@ -1,0 +1,9 @@
+.git
+.github
+.idea
+deploy
+certs
+config.json
+crashes.txt
+README.md
+docker-compose.yml
