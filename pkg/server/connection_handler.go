@@ -421,7 +421,11 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 		log.Println("Error writing GoAway:", err)
 	}
 
-	drainBeforeClose(c)
+	// TEMP-DIAG：大回應偶爾少幾百 KB，而 writeBody 回報成功。把收尾這一段的
+	// 實際走向記下來，才知道是誰在丟資料。查完就刪。
+	started := time.Now()
+	how := drainBeforeClose(c)
+	log.Printf("h2 close: body=%d bytes drain=%s in %v", len(res), how, time.Since(started))
 	if err := conn.Close(); err != nil {
 		log.Println("Error closing HTTP/2 connection:", err)
 	}
@@ -454,16 +458,18 @@ const drainCloseWait = 60 * time.Second
 //
 // Waiting for the peer's own close is what makes this reliable; the deadline
 // is only there so a peer that never hangs up cannot pin the connection open.
-func drainBeforeClose(c <-chan types.ParsedFrame) {
+func drainBeforeClose(c <-chan types.ParsedFrame) string {
 	deadline := time.After(drainCloseWait)
+	n := 0
 	for {
 		select {
 		case frame := <-c:
+			n++
 			if frame.Type == "ERROR_CLOSE" || frame.Type == "ERROR" {
-				return
+				return fmt.Sprintf("peer-closed after %d frames", n)
 			}
 		case <-deadline:
-			return
+			return fmt.Sprintf("deadline after %d frames", n)
 		}
 	}
 }
