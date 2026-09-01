@@ -9,5 +9,6 @@
   "frontend_url": "http://mignon-tokyo-frontend:80",
   "device": "",
   "cors_key": "",
-  "enable_quic": true
+  "enable_quic": true,
+  "frontend_max_bytes": 16777216
 }

@@ -9,5 +9,6 @@
   "frontend_url": "",
   "device": "eth0",
   "cors_key": "X-CORS",
-  "enable_quic": true
+  "enable_quic": true,
+  "frontend_max_bytes": 16777216
 }
