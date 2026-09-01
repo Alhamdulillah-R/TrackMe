@@ -412,15 +412,9 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 		return
 	}
 
-	chunks := utils.SplitBytesIntoChunks(res, 1024)
-	for _, chunk := range chunks {
-		if err := fr.WriteData(headerFrame.Stream, false, chunk); err != nil {
-			log.Println("Error writing data chunk:", err)
-			return
-		}
-	}
-	if err := fr.WriteData(headerFrame.Stream, true, []byte{}); err != nil {
-		log.Println("Error writing final data frame:", err)
+	if err := writeBody(fr, c, headerFrame.Stream, res, initialSendWindow(frames)); err != nil {
+		log.Println("Error writing response body:", err)
+		return
 	}
 	if err := fr.WriteGoAway(headerFrame.Stream, http2.ErrCodeNo, []byte{}); err != nil {
 		log.Println("Error writing GoAway:", err)
@@ -430,6 +424,105 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 	if err := conn.Close(); err != nil {
 		log.Println("Error closing HTTP/2 connection:", err)
 	}
+}
+
+// defaultFlowControlWindow is the initial send window RFC 9113 gives every
+// stream and the connection before either side says otherwise.
+const defaultFlowControlWindow = 65535
+
+// flowControlWait is how long to wait for a WINDOW_UPDATE before giving up.
+// A client that stopped reading is indistinguishable from one that is slow,
+// so the only way out is a deadline.
+const flowControlWait = 30 * time.Second
+
+// initialSendWindow reads the peer's SETTINGS_INITIAL_WINDOW_SIZE.
+//
+// parseHTTP2 has already rendered settings as "NAME = VALUE" strings for the
+// fingerprint, so they are read back from there rather than plumbing the raw
+// frame through a second path.
+func initialSendWindow(frames []types.ParsedFrame) int32 {
+	window := int32(defaultFlowControlWindow)
+	for _, f := range frames {
+		for _, setting := range f.Settings {
+			name, value, ok := strings.Cut(setting, " = ")
+			if !ok || strings.TrimSpace(name) != "INITIAL_WINDOW_SIZE" {
+				continue
+			}
+			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
+			if err == nil && n >= 0 {
+				window = int32(n)
+			}
+		}
+	}
+	return window
+}
+
+// writeBody sends the response as DATA frames, honouring the peer's flow
+// control windows.
+//
+// The framer writes whatever it is given; the peer does not accept whatever it
+// is sent. Ignoring the window makes a client treat the overrun as a
+// FLOW_CONTROL_ERROR and tear the connection down, which surfaces as a
+// truncated download carrying a 200 -- no error anywhere, just a short file.
+// It only shows up past 64 KiB, which is why it went unnoticed while this
+// server returned nothing but JSON and small pages.
+//
+// Both windows are tracked: the connection window (stream 0) is shared, and
+// the stream window is per-request. Whichever is smaller decides the next
+// write.
+func writeBody(fr *http2.Framer, c <-chan types.ParsedFrame, stream uint32, body []byte, initial int32) error {
+	connWindow := int32(defaultFlowControlWindow)
+	streamWindow := initial
+
+	for len(body) > 0 {
+		usable := connWindow
+		if streamWindow < usable {
+			usable = streamWindow
+		}
+
+		if usable <= 0 {
+			// Out of credit. Frames keep arriving on the same channel the
+			// request was read from, so this drains it until the peer grants
+			// more -- and stops if the peer went away instead.
+			select {
+			case frame := <-c:
+				switch {
+				case frame.Type == "ERROR_CLOSE" || frame.Type == "ERROR":
+					return fmt.Errorf("connection closed while sending body")
+				case frame.GoAway != nil:
+					return fmt.Errorf("peer sent GOAWAY (code %d) while sending body", frame.GoAway.ErrCode)
+				case frame.Type == "WINDOW_UPDATE":
+					if frame.Stream == 0 {
+						connWindow += int32(frame.Increment)
+					} else if frame.Stream == stream {
+						streamWindow += int32(frame.Increment)
+					}
+				}
+			case <-time.After(flowControlWait):
+				return fmt.Errorf("peer did not grant flow control credit within %v", flowControlWait)
+			}
+			continue
+		}
+
+		// 16 KiB is the default SETTINGS_MAX_FRAME_SIZE, the largest frame any
+		// peer is required to accept without having advertised more.
+		size := int32(16384)
+		if usable < size {
+			size = usable
+		}
+		if int32(len(body)) < size {
+			size = int32(len(body))
+		}
+
+		if err := fr.WriteData(stream, false, body[:size]); err != nil {
+			return err
+		}
+		body = body[size:]
+		connWindow -= size
+		streamWindow -= size
+	}
+
+	return fr.WriteData(stream, true, []byte{})
 }
 
 // HandleHTTP3 handles HTTP/3 requests
