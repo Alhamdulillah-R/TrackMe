@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/pagpeter/quic-go"
@@ -57,6 +59,8 @@ func init() {
 	if err := srv.GetConfig().LoadFromFile(); err != nil {
 		log.Fatal(err)
 	}
+
+	srv.InitParquet()
 }
 
 func redirect(w http.ResponseWriter, r *http.Request) {
@@ -123,8 +127,19 @@ func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			logCrash(r)
+			srv.CloseParquet()
 			os.Exit(1)
 		}
+	}()
+
+	// Flush buffered data to disk on Ctrl+C / SIGTERM before exiting.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		log.Println("Received signal, shutting down:", sig)
+		srv.CloseParquet()
+		os.Exit(0)
 	}()
 
 	log.Println("Starting server...")

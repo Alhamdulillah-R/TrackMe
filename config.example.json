@@ -1,5 +1,4 @@
 {
-  "log_to_db": false,
   "tls_port": "443",
   "http_port": "80",
   "cert_file": "certs/chain.pem",
@@ -10,5 +9,8 @@
   "device": "eth0",
   "cors_key": "X-CORS",
   "enable_quic": true,
-  "frontend_max_bytes": 16777216
+  "frontend_max_bytes": 16777216,
+  "log_to_parquet": false,
+  "parquet_dir": "data",
+  "parquet_log_ips": false
 }

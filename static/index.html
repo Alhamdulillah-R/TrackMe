@@ -45,6 +45,7 @@
 
         d.getElementById("ja3-hash").innerText = data.tls.ja3_hash;
         d.getElementById("ja3").innerText = data.tls.ja3;
+        d.getElementById("p0f").innerText = data.tcpip?.p0f || "-";
 
         d.getElementById("ja4").innerText = data.tls.ja4;
 
@@ -122,7 +123,7 @@
     <h2 class="text-2xl pt-5">Your fingerprints</h2>
     <hr class="pb-5" />
 
-    <div class="flex flex-wrap">
+    <div class="grid grid-cols-1 lg:grid-cols-2">
       <a
         class="bg-gray-100 dark:bg-gray-900 rounded-md shadow p-3 m-3 hover:bg-gray-50 dark:hover:bg-black min-w-fit max-w-full grow"
       >
@@ -131,11 +132,17 @@
         <p class="text-sm break-all" id="ja3">Loading...</p>
       </a>
       <div
+        class="bg-gray-100 dark:bg-gray-900 rounded-md shadow p-3 m-3 hover:bg-gray-50 dark:hover:bg-black min-w-0 max-w-full"
+      >
+        <h2 class="font-bold">p0f</h2>
+        <p class="text-2xl break-all" id="p0f">Loading...</p>
+      </div>
+      <div
         class="bg-gray-100 dark:bg-gray-900 rounded-md shadow p-3 m-3 hover:bg-gray-50 dark:hover:bg-black min-w-fit max-w-full grow"
       >
         <h2 class="font-bold">JA4</h2>
         <p class="text-2xl break-all" id="ja4">Loading...</p>
-    </div>
+      </div>
       <a
         class="bg-gray-100 dark:bg-gray-900 rounded-md shadow p-3 m-3 hover:bg-gray-50 dark:hover:bg-black min-w-fit max-w-full grow"
       >
@@ -144,7 +151,7 @@
         <p class="text-sm break-all" id="akamai">Loading...</p>
       </a>
       <a
-        class="bg-gray-100 dark:bg-gray-900 rounded-md shadow p-3 m-3 hover:bg-gray-50 dark:hover:bg-black min-w-fit max-w-full grow"
+        class="bg-gray-100 dark:bg-gray-900 rounded-md shadow p-3 m-3 hover:bg-gray-50 dark:hover:bg-black min-w-fit max-w-full grow lg:col-span-2"
       >
         <h2 class="font-bold">PeetPrint</h2>
         <p class="text-2xl break-all" id="peetprint-hash">Loading...</p>

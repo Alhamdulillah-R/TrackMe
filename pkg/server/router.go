@@ -26,6 +26,10 @@ func Router(path string, res types.Response, srv *Server) (Result, error) {
 	if v, ok := srv.GetTCPFingerprints().Load(res.IP); ok {
 		res.TCPIP = v.(types.TCPIPDetails)
 	}
+	if syn, p0f, ok := srv.TakeTCPSyn(res.IP); ok {
+		res.TCPIP.TCPSyn = &syn
+		res.TCPIP.P0F = p0f
+	}
 	res.Donate = "Please consider donating to keep this API running. Visit https://tls.peet.ws"
 	if res.TLS != nil {
 		// Use QUIC JA4 for HTTP/3 connections
@@ -40,6 +44,8 @@ func Router(path string, res types.Response, srv *Server) (Result, error) {
 	} else {
 		Log(fmt.Sprintf("%v %v %v %v %v", cleanIP(res.IP), res.Method, res.HTTPVersion, res.Path, "-"))
 	}
+
+	srv.LogParquet(res)
 
 	u, err := url.Parse("https://tls.peet.ws" + path)
 	var m map[string][]string

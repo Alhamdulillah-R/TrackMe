@@ -97,13 +97,39 @@ type TCPDetails struct {
 	Window             int    `json:"window,omitempty"`
 }
 type TCPIPDetails struct {
-	CapLen    int        `json:"cap_length,omitempty"`
-	DstPort   int        `json:"dst_port,omitempty"`
-	SrcPort   int        `json:"src_port,omitempty"`
-	HeaderLen int        `json:"header_length,omitempty"`
-	TS        []int      `json:"ts,omitempty"`
-	IP        IPDetails  `json:"ip,omitempty"`
-	TCP       TCPDetails `json:"tcp,omitempty"`
+	CapLen    int            `json:"cap_length,omitempty"`
+	DstPort   int            `json:"dst_port,omitempty"`
+	SrcPort   int            `json:"src_port,omitempty"`
+	HeaderLen int            `json:"header_length,omitempty"`
+	TS        []int          `json:"ts,omitempty"`
+	IP        IPDetails      `json:"ip,omitempty"`
+	TCP       TCPDetails     `json:"tcp,omitempty"`
+	TCPSyn    *TCPSynDetails `json:"tcp_syn,omitempty"`
+	P0F       string         `json:"p0f,omitempty"`
+}
+
+// TCPSynDetails contains the fields observed on the initial client SYN. Unlike
+// TCPIPDetails, it is never populated from a later ACK or data packet.
+type TCPSynDetails struct {
+	IPVersion     int      `json:"ip_version"`
+	SrcIP         string   `json:"src_ip"`
+	DstIP         string   `json:"dst_ip"`
+	SrcPort       int      `json:"src_port"`
+	DstPort       int      `json:"dst_port"`
+	TTL           int      `json:"ttl"`
+	IPID          *int     `json:"ip_id,omitempty"`
+	DF            *bool    `json:"df,omitempty"`
+	ECN           bool     `json:"ecn"`
+	Window        int      `json:"window"`
+	MSS           int      `json:"mss"`
+	WindowScale   *int     `json:"window_scale,omitempty"`
+	SACKPermitted bool     `json:"sack_permitted"`
+	Timestamps    bool     `json:"timestamps"`
+	Options       []string `json:"options"`
+	OptionsRaw    string   `json:"options_raw"`
+	OptionOrder   string   `json:"option_order"`
+	PayloadLen    int      `json:"payload_len"`
+	PacketLen     int      `json:"packet_len"`
 }
 
 type Response struct {
@@ -189,6 +215,13 @@ type Config struct {
 	Device           string `json:"device"`
 	CorsKey          string `json:"cors_key"`
 	EnableQUIC       bool   `json:"enable_quic"`
+
+	// LogToParquet enables persisting captured fingerprints to Parquet files.
+	LogToParquet bool `json:"log_to_parquet"`
+	// ParquetDir is the directory the Parquet files are written to.
+	ParquetDir string `json:"parquet_dir"`
+	// ParquetLogIPs controls whether the client IP is stored in the Parquet rows.
+	ParquetLogIPs bool `json:"parquet_log_ips"`
 }
 
 func (c *Config) LoadFromFile() error {
@@ -214,6 +247,12 @@ func (c *Config) LoadFromFile() error {
 	c.Device = tmp.Device
 	c.CorsKey = tmp.CorsKey
 	c.EnableQUIC = tmp.EnableQUIC
+	c.LogToParquet = tmp.LogToParquet
+	c.ParquetDir = tmp.ParquetDir
+	c.ParquetLogIPs = tmp.ParquetLogIPs
+	if c.ParquetDir == "" {
+		c.ParquetDir = "data"
+	}
 	return nil
 }
 
@@ -237,4 +276,7 @@ func (c *Config) MakeDefault() {
 	c.HTTPRedirect = "https://tls.peet.ws"
 	c.CorsKey = "X-CORS"
 	c.EnableQUIC = true
+	c.LogToParquet = false
+	c.ParquetDir = "data"
+	c.ParquetLogIPs = false
 }

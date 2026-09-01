@@ -2,6 +2,7 @@ package http
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pagpeter/trackme/pkg/types"
@@ -17,13 +18,14 @@ import (
 func getSettingsFingerprint(frames []types.ParsedFrame) string {
 	var sf string // SettingsFingerprint
 	mapping := map[string]string{
-		"HEADER_TABLE_SIZE":      "1",
-		"ENABLE_PUSH":            "2",
-		"MAX_CONCURRENT_STREAMS": "3",
-		"INITIAL_WINDOW_SIZE":    "4",
-		"MAX_FRAME_SIZE":         "5",
-		"MAX_HEADER_LIST_SIZE":   "6",
-		"NO_RFC7540_PRIORITIES":  "9",
+		"HEADER_TABLE_SIZE":       "1",
+		"ENABLE_PUSH":             "2",
+		"MAX_CONCURRENT_STREAMS":  "3",
+		"INITIAL_WINDOW_SIZE":     "4",
+		"MAX_FRAME_SIZE":          "5",
+		"MAX_HEADER_LIST_SIZE":    "6",
+		"ENABLE_CONNECT_PROTOCOL": "8",
+		"NO_RFC7540_PRIORITIES":   "9",
 	}
 
 	for _, frame := range frames {
@@ -33,7 +35,18 @@ func getSettingsFingerprint(frames []types.ParsedFrame) string {
 				if len(parts) != 2 {
 					return "error"
 				}
-				sf += mapping[parts[0]] + ":" + parts[1] + ";"
+				settingID := mapping[parts[0]]
+				if settingID == "" && strings.HasPrefix(parts[0], "UNKNOWN_SETTING_") {
+					rawID := strings.TrimPrefix(parts[0], "UNKNOWN_SETTING_")
+					if _, err := strconv.ParseUint(rawID, 10, 16); err != nil {
+						return "error"
+					}
+					settingID = rawID
+				}
+				if settingID == "" {
+					return "error"
+				}
+				sf += settingID + ":" + parts[1] + ";"
 			}
 			break
 		}

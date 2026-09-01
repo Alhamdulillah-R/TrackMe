@@ -82,6 +82,10 @@ The site exposes a lot of different API endpoints.
 
 Returns all of the collected data about an request
 
+When packet capture is enabled with `device`, `tcpip` also contains the initial
+inbound TCP SYN as `tcp_syn` and a raw p0f-format signature as
+`p0f`.
+
 ### /api/tls
 
 Returns only the TLS data
