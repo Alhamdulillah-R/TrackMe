@@ -412,7 +412,8 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 		return
 	}
 
-	if err := writeBody(fr, c, headerFrame.Stream, res, initialSendWindow(frames)); err != nil {
+	connWindow, streamWindow := initialSendWindows(frames, headerFrame.Stream)
+	if err := writeBody(fr, c, headerFrame.Stream, res, connWindow, streamWindow); err != nil {
 		log.Println("Error writing response body:", err)
 		return
 	}
@@ -435,26 +436,42 @@ const defaultFlowControlWindow = 65535
 // so the only way out is a deadline.
 const flowControlWait = 30 * time.Second
 
-// initialSendWindow reads the peer's SETTINGS_INITIAL_WINDOW_SIZE.
+// initialSendWindows works out how much the peer has already allowed us to
+// send, from the frames read before the response started.
+//
+// Both matter. The stream window starts at the peer's
+// SETTINGS_INITIAL_WINDOW_SIZE; the connection window starts at the spec's
+// 65535 regardless, and clients raise it with a WINDOW_UPDATE on stream 0
+// right after the preface. That update arrives while the request is still
+// being read, so it lands in `frames` and never reaches writeBody -- reading
+// it back here is what keeps writeBody from waiting on credit it already has.
 //
 // parseHTTP2 has already rendered settings as "NAME = VALUE" strings for the
 // fingerprint, so they are read back from there rather than plumbing the raw
 // frame through a second path.
-func initialSendWindow(frames []types.ParsedFrame) int32 {
-	window := int32(defaultFlowControlWindow)
+func initialSendWindows(frames []types.ParsedFrame, stream uint32) (conn int32, str int32) {
+	conn = defaultFlowControlWindow
+	str = defaultFlowControlWindow
+
 	for _, f := range frames {
 		for _, setting := range f.Settings {
 			name, value, ok := strings.Cut(setting, " = ")
 			if !ok || strings.TrimSpace(name) != "INITIAL_WINDOW_SIZE" {
 				continue
 			}
-			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
-			if err == nil && n >= 0 {
-				window = int32(n)
+			if n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32); err == nil && n >= 0 {
+				str = int32(n)
+			}
+		}
+		if f.Type == "WINDOW_UPDATE" {
+			if f.Stream == 0 {
+				conn += int32(f.Increment)
+			} else if f.Stream == stream {
+				str += int32(f.Increment)
 			}
 		}
 	}
-	return window
+	return conn, str
 }
 
 // writeBody sends the response as DATA frames, honouring the peer's flow
@@ -470,9 +487,7 @@ func initialSendWindow(frames []types.ParsedFrame) int32 {
 // Both windows are tracked: the connection window (stream 0) is shared, and
 // the stream window is per-request. Whichever is smaller decides the next
 // write.
-func writeBody(fr *http2.Framer, c <-chan types.ParsedFrame, stream uint32, body []byte, initial int32) error {
-	connWindow := int32(defaultFlowControlWindow)
-	streamWindow := initial
+func writeBody(fr *http2.Framer, c <-chan types.ParsedFrame, stream uint32, body []byte, connWindow, streamWindow int32) error {
 
 	for len(body) > 0 {
 		usable := connWindow
