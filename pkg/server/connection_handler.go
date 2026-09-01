@@ -421,9 +421,38 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 		log.Println("Error writing GoAway:", err)
 	}
 
-	time.Sleep(time.Millisecond * 500)
+	drainBeforeClose(c)
 	if err := conn.Close(); err != nil {
 		log.Println("Error closing HTTP/2 connection:", err)
+	}
+}
+
+// drainCloseWait bounds how long to wait for the peer to hang up after GOAWAY.
+const drainCloseWait = 3 * time.Second
+
+// drainBeforeClose reads whatever the peer still has queued, until it hangs up.
+//
+// Closing a socket that still has unread data in its receive buffer makes the
+// kernel send RST rather than FIN, and an RST throws away whatever is still
+// sitting in the send buffer. On a 10 MB response that showed up as an
+// intermittent short download -- the body had been written in full, but the
+// tail never left the machine. Whether it happened depended on whether a
+// WINDOW_UPDATE happened to be unread at that instant, which is why it only
+// hit some requests.
+//
+// Waiting for the peer's own close is what makes this reliable; the deadline
+// is only there so a peer that never hangs up cannot pin the connection open.
+func drainBeforeClose(c <-chan types.ParsedFrame) {
+	deadline := time.After(drainCloseWait)
+	for {
+		select {
+		case frame := <-c:
+			if frame.Type == "ERROR_CLOSE" || frame.Type == "ERROR" {
+				return
+			}
+		case <-deadline:
+			return
+		}
 	}
 }
 
