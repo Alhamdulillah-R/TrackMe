@@ -428,7 +428,19 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 }
 
 // drainCloseWait bounds how long to wait for the peer to hang up after GOAWAY.
-const drainCloseWait = 3 * time.Second
+//
+// This has to outlast the time it takes the body we already wrote to actually
+// reach the peer, which is a function of body size and link speed -- neither of
+// which is known here. 3s was not enough: a 10 MB response over a normal link
+// takes longer than that to drain out of the kernel send buffer, the deadline
+// fired while the peer was still sending WINDOW_UPDATEs, and closing with unread
+// data in the receive buffer makes the kernel send RST, which discards whatever
+// is left in the send buffer. The symptom was a download arriving a few hundred
+// KB short, over HTTP/2 only, with no error logged anywhere.
+//
+// A well-behaved peer closes as soon as it has everything, so this bound only
+// bites on one that never does.
+const drainCloseWait = 60 * time.Second
 
 // drainBeforeClose reads whatever the peer still has queued, until it hangs up.
 //
