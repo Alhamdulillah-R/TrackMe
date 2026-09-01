@@ -242,19 +242,22 @@ func (srv *Server) HandleTLSConnection(conn net.Conn) error {
 
 func (srv *Server) respondToHTTP1(conn net.Conn, resp types.Response) {
 	var isAdmin bool
-	var res []byte
-	var ctype = "text/plain"
+	out := Result{ContentType: "text/plain"}
 	if resp.Method != "OPTIONS" {
 		var err error
-		res, ctype, err = Router(resp.Path, resp, srv)
+		out, err = Router(resp.Path, resp, srv)
 		if err != nil {
 			log.Println("Router error:", err)
-			res = []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error()))
-			ctype = "application/json"
+			out = Result{
+				Status:      http.StatusBadGateway,
+				Body:        []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())),
+				ContentType: "application/json",
+			}
 		}
 	} else {
 		isAdmin = true
 	}
+	res, ctype := out.Body, out.ContentType
 
 	key, isKeySet := srv.GetAdmin()
 	if isKeySet && resp.Http1 != nil {
@@ -265,7 +268,8 @@ func (srv *Server) respondToHTTP1(conn net.Conn, resp types.Response) {
 		}
 	}
 
-	res1 := "HTTP/1.1 200 OK\r\n"
+	status := out.StatusOrDefault()
+	res1 := fmt.Sprintf("HTTP/1.1 %d %s\r\n", status, http.StatusText(status))
 	res1 += "Content-Length: " + fmt.Sprintf("%v\r\n", len(res))
 	res1 += "Content-Type: " + ctype + "; charset=utf-8\r\n"
 	if isAdmin {
@@ -371,24 +375,27 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 		TLS: tlsFingerprint,
 	}
 
-	var res []byte
-	var ctype = "text/plain"
+	out := Result{ContentType: "text/plain"}
 	if method != "OPTIONS" {
 		var err error
-		res, ctype, err = Router(path, resp, srv)
+		out, err = Router(path, resp, srv)
 		if err != nil {
 			log.Println("Router error:", err)
-			res = []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error()))
-			ctype = "application/json"
+			out = Result{
+				Status:      http.StatusBadGateway,
+				Body:        []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())),
+				ContentType: "application/json",
+			}
 		}
 	} else {
 		isAdmin = true
 	}
+	res, ctype := out.Body, out.ContentType
 
 	// Prepare HEADERS
 	hbuf := bytes.NewBuffer([]byte{})
 	encoder := hpack.NewEncoder(hbuf)
-	encoder.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
+	encoder.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(out.StatusOrDefault())})
 	encoder.WriteField(hpack.HeaderField{Name: "server", Value: "TrackMe.peet.ws"})
 	encoder.WriteField(hpack.HeaderField{Name: "content-length", Value: strconv.Itoa(len(res))})
 	encoder.WriteField(hpack.HeaderField{Name: "content-type", Value: ctype})
@@ -521,17 +528,22 @@ func (srv *Server) HandleHTTP3() http.Handler {
 			},
 		}
 
-		res, ctype, err := Router(r.URL.Path, resp, srv)
+		out, err := Router(r.URL.Path, resp, srv)
 		if err != nil {
 			log.Println("Router error:", err)
-			res = []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error()))
-			ctype = "application/json"
+			out = Result{
+				Status:      http.StatusBadGateway,
+				Body:        []byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())),
+				ContentType: "application/json",
+			}
 		}
 
-		w.Header().Set("Content-Type", ctype)
+		w.Header().Set("Content-Type", out.ContentType)
 		w.Header().Set("Server", "TrackMe")
 		w.Header().Set("Alt-Svc", `h3=":443"; ma=86400`)
-		if _, err := w.Write(res); err != nil {
+		// WriteHeader before Write: writing the body first pins the status at 200.
+		w.WriteHeader(out.StatusOrDefault())
+		if _, err := w.Write(out.Body); err != nil {
 			log.Println("Error writing HTTP/3 response:", err)
 		}
 	})

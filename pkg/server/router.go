@@ -21,8 +21,8 @@ func cleanIP(ip string) string {
 	return strings.Replace(strings.Replace(ip, "]", "", -1), "[", "", -1)
 }
 
-// Router returns bytes, content type, and error that should be sent to the client
-func Router(path string, res types.Response, srv *Server) ([]byte, string, error) {
+// Router returns the response that should be sent to the client.
+func Router(path string, res types.Response, srv *Server) (Result, error) {
 	if v, ok := srv.GetTCPFingerprints().Load(res.IP); ok {
 		res.TCPIP = v.(types.TCPIPDetails)
 	}
@@ -55,19 +55,29 @@ func Router(path string, res types.Response, srv *Server) ([]byte, string, error
 	paths := getAllPaths()
 	if u != nil {
 		if val, ok := paths[u.Path]; ok && u.Path == "/api/all" {
-			return val(res, m)
+			return handle(val, res, m)
 		}
-		if frontendURL := srv.GetConfig().FrontendURL; frontendURL != "" {
-			return proxyFrontend(frontendURL, res.Method, u)
+		if cfg := srv.GetConfig(); cfg.FrontendURL != "" {
+			return proxyFrontend(cfg.FrontendURL, res.Method, u, cfg.FrontendMaxBytes)
 		}
 		if val, ok := paths[u.Path]; ok {
-			return val(res, m)
+			return handle(val, res, m)
 		}
 	}
 	// 404
 	b, err := utils.ReadFile("static/404.html")
 	if err != nil {
-		return []byte(`{"error": "page not found"}`), "application/json", nil
+		return Result{Body: []byte(`{"error": "page not found"}`), ContentType: "application/json"}, nil
 	}
-	return []byte(b), "text/html", nil
+	return Result{Body: []byte(b), ContentType: "text/html"}, nil
+}
+
+// handle adapts a RouteHandler, which has no notion of a status code, to the
+// Result the writers now expect. These handlers always mean 200.
+func handle(h RouteHandler, res types.Response, m url.Values) (Result, error) {
+	b, ctype, err := h(res, m)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Body: b, ContentType: ctype}, nil
 }

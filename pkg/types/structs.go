@@ -183,9 +183,12 @@ type Config struct {
 	Host         string `json:"host"`
 	HTTPRedirect string `json:"http_redirect"`
 	FrontendURL  string `json:"frontend_url"`
-	Device       string `json:"device"`
-	CorsKey      string `json:"cors_key"`
-	EnableQUIC   bool   `json:"enable_quic"`
+	// FrontendMaxBytes caps what is buffered from the frontend. 0 uses the
+	// built-in default; raise it when the frontend serves large files.
+	FrontendMaxBytes int64  `json:"frontend_max_bytes"`
+	Device           string `json:"device"`
+	CorsKey          string `json:"cors_key"`
+	EnableQUIC       bool   `json:"enable_quic"`
 }
 
 func (c *Config) LoadFromFile() error {
