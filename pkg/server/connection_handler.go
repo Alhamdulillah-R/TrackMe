@@ -283,9 +283,19 @@ func (srv *Server) respondToHTTP1(conn net.Conn, resp types.Response) {
 	res1 += string(res)
 	res1 += "\r\n\r\n"
 
-	if _, err := conn.Write([]byte(res1)); err != nil {
-		log.Println("Error writing HTTP/1 data:", err)
-		return
+	// written in pieces so that each one, not the whole body, has to finish within responseStallWait
+	wire := []byte(res1)
+	writer := stallConn{conn}
+	for len(wire) > 0 {
+		n := 64 * 1024
+		if len(wire) < n {
+			n = len(wire)
+		}
+		if _, err := writer.Write(wire[:n]); err != nil {
+			log.Println("Error writing HTTP/1 data:", err)
+			return
+		}
+		wire = wire[n:]
 	}
 	if err := conn.Close(); err != nil {
 		log.Println("Error closing HTTP/1 connection:", err)
@@ -295,7 +305,7 @@ func (srv *Server) respondToHTTP1(conn net.Conn, resp types.Response) {
 // https://stackoverflow.com/questions/52002623/golang-tcp-server-how-to-write-http2-data
 func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) {
 	// make a new framer to encode/decode frames
-	fr := http2.NewFramer(conn, conn)
+	fr := http2.NewFramer(stallConn{conn}, conn)
 	c := make(chan types.ParsedFrame)
 	var frames []types.ParsedFrame
 
@@ -338,6 +348,12 @@ func (srv *Server) handleHTTP2(conn net.Conn, tlsFingerprint *types.TLSDetails) 
 		if len(frame.Flags) > 0 && frame.Flags[0] == "EndStream (0x1)" {
 			break
 		}
+	}
+
+	// the request is in; from here on flowControlWait and drainCloseWait bound the reads
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		log.Println("Error clearing read deadline:", err)
+		return
 	}
 
 	// get method, path and user-agent from the header frame
@@ -476,6 +492,24 @@ const defaultFlowControlWindow = 65535
 // A client that stopped reading is indistinguishable from one that is slow,
 // so the only way out is a deadline.
 const flowControlWait = 30 * time.Second
+
+// responseStallWait is how long a single write of a response may go without progress.
+const responseStallWait = 30 * time.Second
+
+/*
+stallConn renews the write deadline before every write, so a slow peer gets as
+long as it needs for the whole response while one that stopped reading is cut off.
+*/
+type stallConn struct {
+	net.Conn
+}
+
+func (c stallConn) Write(p []byte) (int, error) {
+	if err := c.Conn.SetWriteDeadline(time.Now().Add(responseStallWait)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Write(p)
+}
 
 // initialSendWindows works out how much the peer has already allowed us to
 // send, from the frames read before the response started.

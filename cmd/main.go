@@ -82,18 +82,15 @@ func StartRedirectServer(host, port string) {
 	}
 }
 
-// Timeout function
+// timeoutHandleTLSConnection gives the handshake and the request 15 seconds.
+//
+// Do not bring back a timer that closes conn from outside: it also covers the
+// response, and cuts every download that takes longer than that to arrive.
 func timeoutHandleTLSConnection(conn net.Conn) error {
-	result := make(chan error)
-	go func() {
-		result <- srv.HandleTLSConnection(conn)
-	}()
-	select {
-	case <-time.After(15 * time.Second):
-		return fmt.Errorf("connection timed out")
-	case err := <-result:
-		return err
+	if err := conn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
+		return fmt.Errorf("failed to set request deadline: %w", err)
 	}
+	return srv.HandleTLSConnection(conn)
 }
 
 func StartHTTP3Server(host string, port int) {
